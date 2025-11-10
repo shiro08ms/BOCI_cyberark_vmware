@@ -1,0 +1,42 @@
+---
+- name: VMware Multi-Host VM Snapshot Management
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # Survey variables - will be populated by survey form
+    # vm_names: Comma-separated list of VM names (e.g., "RHEL9-test,Ubuntu-web01,Windows-DB02")
+    # snapshot_name: Custom snapshot name (optional)
+    # snapshot_description: Custom snapshot description (optional)
+    
+    # vCenter连接信息
+    vcenter_hostname: "apuvcc01.hk.bocigroup.com"
+    vcenter_username: "ansible_service@HKDMUAT.BOCIGROUPUAT.COM"
+    vcenter_password: "@nsible1234"
+    datacenter_name: "GNC UAT"
+    vm_folder: "/GNC UAT/vm/"
+    
+    # 快照配置默认值
+    default_snapshot_name: "multi-host-snapshot-{{ ansible_date_time.epoch }}"
+    default_snapshot_description: "Multi-host snapshot created on {{ ansible_date_time.date }}"
+    
+  tasks:
+    - name: Set snapshot variables with defaults
+      set_fact:
+        snapshot_name: "{{ snapshot_name | default(default_snapshot_name) }}"
+        snapshot_description: "{{ snapshot_description | default(default_snapshot_description) }}"
+        vm_list: "{{ vm_names.split(',') | map('trim') | list }}"
+
+    - name: "Create VM snapshot for {{ item }}"
+      vmware.vmware.vm_snapshot:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        datacenter: "{{ datacenter_name }}"
+        folder: "{{ vm_folder }}"
+        name: "{{ item }}"
+        validate_certs: false
+        snapshot_name: "{{ snapshot_name }}"
+        description: "{{ snapshot_description }}"
+        state: present
+      loop: "{{ vm_list }}"
+

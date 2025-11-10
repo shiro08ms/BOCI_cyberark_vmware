@@ -1,0 +1,25 @@
+---
+- name: test cyberark
+  hosts: all
+  tasks:
+    - name: retrieve password
+      debug:
+        msg: apple
+
+    - name: credential retrieval basic
+      cyberark.pas.cyberark_authentication:
+        api_base_url: "https://10.33.108.136"
+        username: "AAP_UAT"
+        password: "Ansible1234!"
+        validate_certs: false
+          #  use_shared_logon_authentication: false
+
+
+
+    - name: credential retrieval basic
+      cyberark.pas.cyberark_credential:
+        api_base_url: "https://10.33.108.136"
+        app_id: "testapp"
+        query: "Safe=Infra-Unix-Normal;UserName=root;Address=10.33.109.82"
+        validate_certs: false
+      ignore_errors: true

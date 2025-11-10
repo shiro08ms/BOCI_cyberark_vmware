@@ -1,0 +1,23 @@
+---
+- name: show snapshot information
+  hosts: all
+  vars:
+    ansible_python_interpreter: /usr/bin/python3.11
+  tasks:
+    - name: show vm information
+      community.vmware.vmware_guest_info:
+        hostname: "apuvcc01.hk.bocigroup.com"
+          #username: "ansible_service@HKDMUAT.BOCIGROUPUAT.COM"
+        username: "HKDMUAT\ansible_service"
+        password: "@nsible1234"
+        name: "RHEL9-test"
+        validate_certs: false
+        schema: "vsphere"
+        properties:
+          - "config.name"
+          - "guest.ipAddress"
+      register: vm_info
+      ignore_errors: true
+    - name: display vm information
+      debug:
+        msg: "{{ vm_info }}"

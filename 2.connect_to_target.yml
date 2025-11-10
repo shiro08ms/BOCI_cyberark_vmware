@@ -1,0 +1,30 @@
+---
+- name: Get password from CyberArk and connect to target
+  hosts: all
+  gather_facts: false
+  tasks:
+    # Step 1: Retrieve target host password from CyberArk
+    - name: Retrieve target host password from CyberArk
+      cyberark.pas.cyberark_credential:
+        api_base_url: "{{ cyberark_api_base_url }}"  # From AAP credential
+        app_id: "{{ cyberark_app_id }}"              # From AAP credential  
+        query: "Safe=Infra-Unix-Normal;UserName=root;Address={{ inventory_hostname }}"
+        validate_certs: false
+      register: target_credentials
+      delegate_to: localhost
+      run_once: true
+
+    # Step 2: Set target host connection credentials
+    - name: Set target host connection credentials
+      set_fact:
+        ansible_user: "root"
+        ansible_password: "{{ target_credentials.password }}"
+        ansible_become_password: "{{ target_credentials.password }}"
+
+    # Step 3: Now we can connect to target host
+    - name: Hello World on target host
+      debug:
+        msg: "Hello World from {{ inventory_hostname }}!"
+
+    - name: Test connection
+      command: whoami

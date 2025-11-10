@@ -1,0 +1,185 @@
+---
+- name: Create VM Snapshot on FusionCompute (Multiple VMs on Single Host)
+  hosts: localhost
+  gather_facts: yes
+  
+  vars:
+    # ============ FusionCompute API Configuration ============
+    fusioncompute_host: "10.50.2.42"
+    fusioncompute_port: "7443"
+    
+    # ============ Authentication Configuration ============
+    auth_user: "ansible_service"
+    auth_key: "78b55f9583857ab0f9fcb17fadcd9f73a53ae032cff4d3d41b55f748635a9f51"
+    auth_user_type: "2"
+    auth_auth_type: "0"
+    
+    # ============ Site Configuration ============
+    site_id: "4744135D"
+    
+    # ============ VM IDs (Survey Form Input) ============
+    # vm_ids_input: Must be passed via Survey form or command line
+    # Example: -e "vm_ids_input=i-00000322,i-00000323"
+    
+    # Convert comma-separated VM ID string to list
+    vm_ids_list: "{{ vm_ids_input.split(',') | map('trim') | list }}"
+    
+    # ============ Snapshot Configuration ============
+    snapshot_name_prefix: "snapshot"
+    snapshot_description: "VM snapshot created by Ansible"
+    need_memory_shot: false
+    is_consistent: false
+    snapshot_type: "normal"
+    
+    # Snapshot name with timestamp
+    snapshot_name: "{{ snapshot_name_prefix }}-{{ ansible_date_time.epoch }}"
+  
+  tasks:
+    - name: Validate VM IDs Input
+      fail:
+        msg: "VM IDs input is required. Please provide at least one VM ID."
+      when: vm_ids_input is not defined or vm_ids_input | trim | length == 0
+    
+    - name: Display VM IDs to Process
+      debug:
+        msg: "Will create snapshots for {{ vm_ids_list | length }} VM(s): {{ vm_ids_list | join(', ') }}"
+    
+    - name: Step 0 - Authenticate and Get Token
+      uri:
+        url: "https://{{ fusioncompute_host }}:{{ fusioncompute_port }}/service/session"
+        method: POST
+        headers:
+          Content-Type: "application/json; charset=UTF-8"
+          X-Auth-User: "{{ auth_user }}"
+          X-Auth-Key: "{{ auth_key }}"
+          X-Auth-UserType: "{{ auth_user_type }}"
+          X-Auth-AuthType: "{{ auth_auth_type }}"
+        validate_certs: no
+        status_code: 200
+      register: auth_result
+      failed_when: auth_result.status != 200
+      
+    - name: Display Authentication Result
+      debug:
+        msg: "Authentication successful. Token obtained."
+        
+    - name: Set Authentication Token
+      set_fact:
+        fusioncompute_token: "{{ auth_result.x_auth_token }}"
+        
+    - name: Step 1 - Get Sites
+      uri:
+        url: "https://{{ fusioncompute_host }}:{{ fusioncompute_port }}/service/sites"
+        method: GET
+        headers:
+          Content-Type: "application/json; charset=UTF-8"
+          X-Auth-Token: "{{ fusioncompute_token }}"
+        validate_certs: no
+        status_code: 200
+      register: sites_result
+      failed_when: sites_result.status != 200
+      
+    - name: Display Sites Information
+      debug:
+        msg: "Sites retrieved successfully. Found {{ sites_result.json | length }} sites."
+      
+    - name: Step 2 - Get VMs for Site
+      uri:
+        url: "https://{{ fusioncompute_host }}:{{ fusioncompute_port }}/service/sites/{{ site_id }}/vms"
+        method: GET
+        headers:
+          Content-Type: "application/json; charset=UTF-8"
+          X-Auth-Token: "{{ fusioncompute_token }}"
+        validate_certs: no
+        status_code: 200
+      register: vms_result
+      failed_when: vms_result.status != 200
+      
+    - name: Display VMs Information
+      debug:
+        msg: "VMs retrieved successfully. Found {{ vms_result.json | length }} VMs in site."
+      
+    - name: Step 3 - Get Specific VM Details
+      uri:
+        url: "https://{{ fusioncompute_host }}:{{ fusioncompute_port }}/service/sites/{{ site_id }}/vms/{{ item }}"
+        method: GET
+        headers:
+          Content-Type: "application/json; charset=UTF-8"
+          X-Auth-Token: "{{ fusioncompute_token }}"
+        validate_certs: no
+        status_code: 200
+      register: vm_details
+      failed_when: vm_details.status != 200
+      loop: "{{ vm_ids_list }}"
+      
+    - name: Display VM Details
+      debug:
+        msg: "VM {{ item.item }} details retrieved successfully. VM name: {{ item.json.name | default('Unknown') }}"
+      loop: "{{ vm_details.results }}"
+      
+    - name: Step 4 - Get Existing Snapshots
+      uri:
+        url: "https://{{ fusioncompute_host }}:{{ fusioncompute_port }}/service/sites/{{ site_id }}/vms/{{ item }}/snapshots"
+        method: GET
+        headers:
+          Content-Type: "application/json; charset=UTF-8"
+          X-Auth-Token: "{{ fusioncompute_token }}"
+        validate_certs: no
+        status_code: 200
+      register: existing_snapshots
+      failed_when: existing_snapshots.status != 200
+      loop: "{{ vm_ids_list }}"
+      
+    - name: Display Existing Snapshots
+      debug:
+        msg: "Found {{ item.json | length }} existing snapshots for VM {{ item.item }}"
+      loop: "{{ existing_snapshots.results }}"
+      
+    - name: Step 5 - Create VM Snapshot
+      uri:
+        url: "https://{{ fusioncompute_host }}:{{ fusioncompute_port }}/service/sites/{{ site_id }}/vms/{{ item }}/snapshots"
+        method: POST
+        headers:
+          Content-Type: "application/json; charset=UTF-8"
+          Accept: "application/json"
+          X-Auth-Token: "{{ fusioncompute_token }}"
+        body_format: json
+        body:
+          name: "{{ snapshot_name }}"
+          description: "{{ snapshot_description }} (VM: {{ item }})"
+          needMemoryShot: "{{ need_memory_shot }}"
+          isConsistent: "{{ is_consistent }}"
+          type: "{{ snapshot_type }}"
+        validate_certs: no
+        status_code: 200
+      register: snapshot_result
+      failed_when: snapshot_result.status != 200
+      loop: "{{ vm_ids_list }}"
+      
+    - name: Check for Authentication Error
+      fail:
+        msg: "Authentication failed for VM {{ item.item }}: {{ item.json.errorDes | default('Unknown error') }} (Error Code: {{ item.json.errorCode | default('Unknown') }}). Please update the authentication token."
+      when: item.json.errorCode is defined and item.json.errorCode == "10000002"
+      loop: "{{ snapshot_result.results }}"
+      
+    - name: Check for Other API Errors
+      fail:
+        msg: "API Error for VM {{ item.item }}: {{ item.json.errorDes | default('Unknown error') }} (Error Code: {{ item.json.errorCode | default('Unknown') }})"
+      when: item.json.errorCode is defined and item.json.errorCode != "10000002"
+      loop: "{{ snapshot_result.results }}"
+      
+    - name: Display Snapshot Creation Summary
+      debug:
+        msg: "Successfully created snapshots for {{ snapshot_result.results | selectattr('json.urn', 'defined') | list | length }} out of {{ vm_ids_list | length }} VMs"
+      
+    - name: Display Snapshot Creation Result
+      debug:
+        msg: |
+          Snapshot created successfully for VM {{ item.item }}!
+          Snapshot URN: {{ item.json.urn }}
+          Snapshot URI: {{ item.json.uri }}
+          Task URN: {{ item.json.taskUrn }}
+          Task URI: {{ item.json.taskUri }}
+      when: item.json.urn is defined
+      loop: "{{ snapshot_result.results }}"
+
