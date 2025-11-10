@@ -1,0 +1,8 @@
+download_url: https://HKXUPITD30368.hk.bocigroup.com/api/galaxy/v3/plugin/ansible/content/published/collections/artifacts/cyberark-pas-1.0.35.tar.gz
+format_version: 1.0.0
+name: pas
+namespace: cyberark
+server: https://HKXUPITD30368.hk.bocigroup.com/api/galaxy/
+signatures: []
+version: 1.0.35
+version_url: /api/galaxy/v3/plugin/ansible/content/published/collections/index/cyberark/pas/versions/1.0.35/
